@@ -220,7 +220,7 @@ rf <- randomForest(formula=rating~.,
 # Calculate RMSE
 errors <- ((rf$test$predicted - test_rf$rating)^2)
 RMSE <- sqrt(sum(errors))
-RMSE
+RMSE # 136.1901
        
        
 # Variable importance plot 
@@ -255,4 +255,4 @@ p2 <- imp2 %>%
        y="")
 
 grid.arrange(p1, p2, ncol=2, nrow=1)
-# 136.1901
+
