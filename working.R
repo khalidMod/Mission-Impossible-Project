@@ -221,4 +221,38 @@ rf <- randomForest(formula=rating~.,
 errors <- ((rf$test$predicted - test_rf$rating)^2)
 RMSE <- sqrt(sum(errors))
 RMSE
+       
+       
+# Variable importance plot 
+library(gridExtra)
+
+# Extract data from default plot and create new one
+imp <- varImpPlot(rf)
+imp1 <- data.frame(variables=rownames(imp), values=imp[,1])
+imp2 <- data.frame(variables=rownames(imp), values=imp[,2])
+rownames(imp1) <- NULL
+rownames(imp2) <- NULL
+
+# ggplot version
+p1 <- imp1 %>% 
+  ggplot(aes(x=reorder(variables, values), weight=values)) + 
+  geom_bar(fill="blue") +
+  coord_flip() + 
+  theme(legend.position="none") + 
+  labs(title="MeanDecreaseAccuracy", 
+       subtitle="For Random Forest",
+       x="",
+       y="")
+
+p2 <- imp2 %>% 
+  ggplot(aes(x=reorder(variables, values), weight=values)) + 
+  geom_bar(fill="blue") +
+  coord_flip() + 
+  theme(legend.position="none") + 
+  labs(title="MeanDecreaseGini", 
+       subtitle="For Random Forest",
+       x="",
+       y="")
+
+grid.arrange(p1, p2, ncol=2, nrow=1)
 # 136.1901
