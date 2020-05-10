@@ -221,3 +221,4 @@ rf <- randomForest(formula=rating~.,
 errors <- ((rf$test$predicted - test_rf$rating)^2)
 RMSE <- sqrt(sum(errors))
 RMSE
+# 136.1901
