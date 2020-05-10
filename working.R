@@ -168,7 +168,7 @@ user_features <- function(df){
   features <- df %>% 
     group_by(user_id) %>% 
     summarise(user_count=n(), user_mean_rating=mean(rating), 
-              user_sd_rating=sd(rating), user_age=Sys.time()-min(timestamp)) %>% 
+              user_sd_rating=sd(rating), user_age=as.numeric(round(Sys.time()-min(timestamp),0))) %>% 
     ungroup()
   
   # Merge to original dataframe and return
@@ -193,23 +193,31 @@ test_set <- test_set %>%
 
 ## Train Model
 
-# Set control 
-cluster = makeCluster(detectCores()-1)
-registerDoParallel(cluster)
+# Random Forest model
+train_cols <- c("rating", "age", "gender", 
+                "item_mean_rating", "user_age_band_item_mean_rating",
+                "user_gender_item_mean_rating", 
+                "item_imdb_length", "item_imdb_staff_votes", "item_imdb_staff_average", 
+                "item_imdb_top_1000_voters_votes", "item_imdb_top_1000_voters_average", 
+                "user_gender_item_imdb_mean_rating", "user_gender_item_imdb_votes", 
+                "user_age_band_item_imdb_votes", "user_age_band_item_imdb_mean_rating",
+                "user_gender_age_band_item_imdb_votes", 
+                "user_gender_age_band_item_imdb_mean_rating", "item_imdb_rating_of_ten",                  
+                "item_imdb_count_ratings", "user_count", "user_mean_rating", 
+                "user_sd_rating", "user_age", "review_rank")
+# Removed "occupation", "item_imdb_mature_rating", "age_band" and genres
 
-control <- trainControl(method="repeatedcv",
-                        number=5,
-                        repeats=1,
-                        allowParallel=TRUE)
+train_rf <- train_set[, train_cols]
+test_rf <- test_set[, train_cols]
+test_rf[is.na(test_rf$user_sd_rating), "user_sd_rating"] <- 0
 
+rf <- randomForest(formula=rating~., 
+                   data=train_rf, 
+                   importance=TRUE, 
+                   xtest=test_rf[, train_cols[2:length(train_cols)]], 
+                   ntree=100)
 
-# Random forest model
-train_rf <- train_set %>% 
-  select(-user_id, -zip_code, -item_id, -timestamp, -movie_title, 
-         -imdb_url, -release_date, -user_age)
-
-rf_fit <- train(rating~., 
-                 data=train_rf,
-                 method="rf",
-                 trControl=control,
-                 metric="RMSE")
+# Calculate RMSE
+errors <- ((rf$test$predicted - test_rf$rating)^2)
+RMSE <- sqrt(sum(errors))
+RMSE
