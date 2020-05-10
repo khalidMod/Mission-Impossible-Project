@@ -203,7 +203,7 @@ control <- trainControl(method="repeatedcv",
                         allowParallel=TRUE)
 
 
-# XGboost model
+# Random forest model
 train_rf <- train_set %>% 
   select(-user_id, -zip_code, -item_id, -timestamp, -movie_title, 
          -imdb_url, -release_date, -user_age)
