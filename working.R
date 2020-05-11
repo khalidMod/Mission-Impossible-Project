@@ -7,6 +7,7 @@ library(randomForest)
 library(xgboost)
 library(parallel)
 library(doParallel)
+library(gbm)
 
 data <- readRDS("AT2_train_STUDENT.rds")
 
@@ -219,8 +220,8 @@ rf <- randomForest(formula=rating~.,
 
 # Calculate RMSE
 errors <- ((rf$test$predicted - test_rf$rating)^2)
-RMSE <- sqrt(sum(errors))
-RMSE # 136.1901
+RMSE <- sqrt(sum(errors)/length(test_rf$rating))
+RMSE 
        
        
 # Variable importance plot 
@@ -256,3 +257,27 @@ p2 <- imp2 %>%
 
 grid.arrange(p1, p2, ncol=2, nrow=1)
 
+
+# Gradient Boosting 
+gbm_depth = 5 
+gbm_n_min = 15 
+gbm_shrinkage=0.01 
+cores_num = detectCores() - 1 
+gbm_cv_folds=5 
+num_trees = 200
+
+gbm_fit = gbm(train_rf$rating~.,
+              data=train_rf[, -1],
+              distribution='gaussian', 
+              n.trees=num_trees,
+              interaction.depth= gbm_depth,
+              n.minobsinnode = gbm_n_min, 
+              shrinkage=gbm_shrinkage, 
+              cv.folds=gbm_cv_folds,
+              verbose = FALSE, 
+              n.cores = cores_num)
+summary(gbm_fit)
+
+# Predictions and RMSE
+pred <- predict(gbm_fit, n.trees = gbm_fit$n.trees, test_set)
+RMSE(pred, test_set$rating)
