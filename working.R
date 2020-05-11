@@ -8,6 +8,7 @@ library(xgboost)
 library(parallel)
 library(doParallel)
 library(gbm)
+library(gridExtra)
 
 data <- readRDS("AT2_train_STUDENT.rds")
 
@@ -129,7 +130,28 @@ p <- user_genre_details %>%
        x="Rating", 
        y="")
 p  
-# Recalc after train/test split to avoid leakage
+       
+# Rating counts per Genre
+genre_counts <- genre_ratings %>% 
+  select(-rating) %>% 
+  group_by(user_id) %>% 
+  summarise_all(sum) %>% 
+  ungroup()
+
+# Plot counts
+p <- genre_counts %>% 
+  pivot_longer(-c("user_id"), names_to="category", values_to="values") %>% 
+  ggplot(aes(x=reorder(category, values), y=values, fill=category)) + 
+  geom_boxplot() +
+  theme(legend.position="none", axis.text.x=element_text(angle=45)) + 
+  labs(title="Number of User Reviews", 
+       subtitle="Per Genre",
+       x="Genres",
+       y="Count")
+p 
+       
+# Recalc genre aggregations after train/test split to avoid leakage in model training
+
 
 
 # Train/Test Split - before imputation to avoid test set leakage
@@ -159,11 +181,11 @@ imdb_rating_estimate <- function(df){
   old_ratings <- df %>% 
     filter(!is.na(item_imdb_rating_of_ten)) %>% 
     group_by(movie_title) %>% 
-    select(all_of(cols)) %>% 
+    select(cols) %>% 
     unique() %>% 
     ungroup()
   
-  combined_ratings <- rbind(old_ratings, select(new_ratings, all_of(cols)))
+  combined_ratings <- rbind(old_ratings, select(new_ratings, cols))
   
   return(combined_ratings)
 }
@@ -261,7 +283,6 @@ RMSE
        
        
 # Variable importance plot 
-library(gridExtra)
 
 # Extract data from default plot and create new one
 imp <- varImpPlot(rf)
