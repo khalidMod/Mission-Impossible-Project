@@ -96,6 +96,42 @@ data %>%
   geom_bar(fill="steelblue") 
 
 
+# Look at genre details
+genre_ratings <- data %>% 
+  select(user_id, rating, action:western)
+genres <- names(genre_ratings)[3:length(genre_ratings)]
+
+user_genre_details <- genre_ratings %>% 
+  select(user_id) %>% 
+  unique()
+
+for(n in 1:length(genres)){
+  # Get genre mean ratings per user
+  single_genre <- genre_ratings[genre_ratings[genres[n]]==TRUE,] %>% 
+    group_by(user_id) %>% 
+    summarise(mean=mean(rating))
+  
+  names(single_genre)[2] <- paste(genres[n], "mean", sep="_")
+  
+  # Merge all genres 
+  user_genre_details <- left_join(user_genre_details, single_genre, by="user_id")
+}
+
+# Plot Distributions
+p <- user_genre_details %>% 
+  pivot_longer(-c("user_id"), names_to="category", values_to="values") %>% 
+  ggplot(aes(x=values, group=category, fill=category)) +
+  geom_density() +
+  facet_wrap(~category, ncol=6, scales="free_y") + 
+  theme(legend.position="none") + 
+  labs(title="Genre Distributions", 
+       subtitle="User Average per Genre", 
+       x="Rating", 
+       y="")
+p  
+# Recalc after train/test split to avoid leakage
+
+
 # Train/Test Split - before imputation to avoid test set leakage
 set.seed(999)
 data <- data[sample(1:nrow(data)), ]
