@@ -453,7 +453,17 @@ p2 <- imp2 %>%
 grid.arrange(p1, p2, ncol=2, nrow=1)
 
 
-# Gradient Boosting 
+# Gradient Boosting
+# Data formatting
+train_gbm <- train_rf 
+train_gbm$rating <- as.numeric(train_gbm$rating)
+train_gbm$age <- as.numeric(train_gbm$age)
+train_gbm$item_imdb_length <- as.numeric(train_gbm$item_imdb_length)
+train_gbm$item_imdb_staff_votes <- as.numeric(train_gbm$item_imdb_staff_votes)
+train_gbm$item_imdb_top_1000_voters_votes <- as.numeric(train_gbm$item_imdb_top_1000_voters_votes)
+train_gbm$user_count <- as.numeric(train_gbm$user_count)
+
+# GBM hyper parameters
 gbm_depth = 5 
 gbm_n_min = 15 
 gbm_shrinkage=0.01 
@@ -461,8 +471,9 @@ cores_num = detectCores() - 1
 gbm_cv_folds=5 
 num_trees = 200
 
-gbm_fit = gbm(train_rf$rating~.,
-              data=train_rf[, -1],
+# Train Model
+gbm_fit = gbm(train_gbm$rating~.,
+              data=train_gbm[, -1],
               distribution='gaussian', 
               n.trees=num_trees,
               interaction.depth= gbm_depth,
@@ -473,6 +484,16 @@ gbm_fit = gbm(train_rf$rating~.,
               n.cores = cores_num)
 summary(gbm_fit)
 
-# Predictions and RMSE
+# Test Set Predictions
 pred <- predict(gbm_fit, n.trees = gbm_fit$n.trees, test_set)
 RMSE(pred, test_set$rating)
+
+
+# Out of Sample Predictions and Submission
+new_data$rating_gbm <- predict(gbm_fit, n.tree=gbm_fit$n.trees, new_data)
+
+submission_file <- new_data %>% 
+  select(rating_gbm, user_item) %>% 
+  rename(rating=rating_gbm)
+
+write.csv(submission_file, "gb_submission.csv", row.names=FALSE)
