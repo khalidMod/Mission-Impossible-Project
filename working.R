@@ -261,7 +261,13 @@ train_cols <- c("rating", "age", "gender",
                 "user_gender_age_band_item_imdb_votes", 
                 "user_gender_age_band_item_imdb_mean_rating", "item_imdb_rating_of_ten",                  
                 "item_imdb_count_ratings", "user_count", "user_mean_rating", 
-                "user_sd_rating", "user_age", "review_rank")
+                "user_sd_rating", "user_age", "review_rank",
+                "action_mean", "adventure_mean", "animation_mean",
+                "childrens_mean", "comedy_mean", "crime_mean",
+                "documentary_mean", "drama_mean", "fantasy_mean",
+                "film_noir_mean", "horror_mean", "musical_mean",
+                "mystery_mean", "romance_mean", "sci_fi_mean",
+                "thriller_mean", "war_mean", "western_mean")
 # Removed "occupation", "item_imdb_mature_rating", "age_band" and genres
 
 train_rf <- train_set[, train_cols]
