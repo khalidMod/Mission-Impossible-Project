@@ -152,8 +152,6 @@ p
        
 # Recalc genre aggregations after train/test split to avoid leakage in model training
 
-
-
 # Train/Test Split - before imputation to avoid test set leakage
 set.seed(999)
 data <- data[sample(1:nrow(data)), ]
@@ -277,10 +275,150 @@ rf <- randomForest(formula=rating~.,
                    ntree=100)
 
 # Calculate RMSE
-errors <- ((rf$test$predicted - test_rf$rating)^2)
-RMSE <- sqrt(sum(errors)/length(test_rf$rating))
-RMSE 
+RMSE(rf$test$predicted, test_set$rating)
        
+## Prediction
+new_data <- readRDS("AT2_test_STUDENT.rds")
+
+# Feature engineering on test set using trained amounts
+# Merge user level statistics
+user_stats <- train_set %>% 
+  select(user_id, action_mean:user_age) %>% 
+  group_by(user_id) %>% 
+  unique() %>% 
+  ungroup()
+
+new_data <- left_join(new_data, user_stats, by="user_id")
+new_data$user_id <- as.factor(new_data$user_id)
+
+# Add review rank
+new_data <- new_data %>% 
+  group_by(movie_title) %>% 
+  mutate(review_rank=rank(timestamp)) %>% 
+  ungroup()
+
+# Check missing data
+sapply(new_data, function(x) sum(is.na(x)))
+
+# Get item level stats from training data
+item_stats <- train_set %>% 
+  select(item_id, item_imdb_rating_of_ten:item_imdb_top_1000_voters_average) %>% 
+  group_by(item_id) %>% 
+  unique() %>% 
+  ungroup()
+
+# Isolate missing imdb data
+new_item_stats <- new_data %>% 
+  select(item_id, item_imdb_rating_of_ten:item_imdb_top_1000_voters_average) %>% 
+  group_by(item_id) %>% 
+  unique() %>% 
+  ungroup()
+
+missing_items <- new_item_stats %>% 
+  filter(is.na(item_imdb_rating_of_ten)) %>% 
+  select(item_id)
+
+# Missing values don't existing in training set - use imputation instead
+sum(missing_items$item_id %in% item_stats$item_id)
+
+for(n in names(new_item_stats)[2:ncol(new_item_stats)]){
+  if(n %in% c("item_imdb_count_ratings", "item_imdb_staff_votes",
+              "item_imdb_top_1000_voters_votes")) {
+    # Counting Items
+    new_data[is.na(new_data[, n]), n] <- 0
+    
+  } else if (n %in% c("item_imdb_rating_of_ten", 
+                      "item_imdb_staff_average", 
+                      "item_imdb_top_1000_voters_average")){
+    # Rating Items
+    new_data[is.na(new_data[, n]), n] <- mean(unlist(new_data[, n]), na.rm=TRUE) + rnorm(1)* sd(unlist(new_data[, n]), na.rm=TRUE)
+    
+  } else if (n=="item_imdb_length") {
+    new_data[is.na(new_data[, n]), n] <- round(mean(unlist(new_data[, n]), na.rm=TRUE) + rnorm(1)* sd(unlist(new_data[, n]), na.rm=TRUE), 0)
+  }
+  
+  # Skip - not included in model
+  # "item_imdb_mature_rating"
+
+}
+
+# Calc mean/sd values for user subgroupings
+new_age_band_mean <- new_data %>% 
+  group_by(age_band) %>% 
+  summarise(new_age_band_mean=mean(item_mean_rating, na.rm=TRUE),
+            new_age_band_sd=sd(item_mean_rating, na.rm=TRUE))
+
+new_gender_mean <- new_data %>% 
+  group_by(gender) %>% 
+  summarise(new_gender_mean=mean(item_mean_rating, na.rm=TRUE),
+            new_gender_sd=sd(item_mean_rating, na.rm=TRUE))
+
+new_gender_imdb_mean <- new_data %>% 
+  group_by(gender) %>% 
+  summarise(new_gender_imdb_mean=mean(item_imdb_rating_of_ten, na.rm=TRUE),
+            new_gender_imdb_sd=sd(item_imdb_rating_of_ten, na.rm=TRUE))
+
+new_age_band_imdb_mean <- new_data %>% 
+  group_by(age_band) %>% 
+  summarise(new_age_band_imdb_mean=mean(item_imdb_rating_of_ten, na.rm=TRUE),
+            new_age_band_imdb_sd=sd(item_imdb_rating_of_ten, na.rm=TRUE))
+
+new_gender_age_band_imdb_mean <- new_data %>% 
+  group_by(gender, age_band) %>% 
+  summarise(new_gender_age_band_imdb_mean=mean(item_imdb_rating_of_ten, na.rm=TRUE),
+            new_gender_age_band_imdb_sd=sd(item_imdb_rating_of_ten, na.rm=TRUE))
+
+# Merge new means/sd with main data set
+new_data <- left_join(new_data, new_age_band_mean, by="age_band")
+new_data <- left_join(new_data, new_gender_mean, by="gender")
+new_data <- left_join(new_data, new_gender_imdb_mean, by="gender")
+new_data <- left_join(new_data, new_age_band_imdb_mean, by="age_band")
+new_data <- left_join(new_data, new_gender_age_band_imdb_mean, by=c("gender", "age_band"))
+
+# Fill NA's using new mean/sd values
+new_data[is.na(new_data$user_age_band_item_mean_rating), "user_age_band_item_mean_rating"] <- new_data %>% 
+  filter(is.na(user_age_band_item_mean_rating)) %>% 
+  mutate(user_age_band_item_mean_rating=new_age_band_mean + rnorm(1)*new_age_band_sd) %>% 
+  select(user_age_band_item_mean_rating)
+
+new_data[is.na(new_data$user_gender_item_mean_rating), "user_gender_item_mean_rating"] <- new_data %>% 
+  filter(is.na(user_gender_item_mean_rating)) %>% 
+  mutate(user_gender_item_mean_rating=new_gender_mean + rnorm(1)*new_gender_sd) %>% 
+  select(user_gender_item_mean_rating)
+
+new_data[is.na(new_data$user_gender_item_imdb_mean_rating), "user_gender_item_imdb_mean_rating"] <- new_data %>% 
+  filter(is.na(user_gender_item_imdb_mean_rating)) %>% 
+  mutate(user_gender_item_imdb_mean_rating=new_gender_imdb_mean + rnorm(1)*new_gender_imdb_sd) %>% 
+  select(user_gender_item_imdb_mean_rating)
+
+new_data[is.na(new_data$user_age_band_item_imdb_mean_rating), "user_age_band_item_imdb_mean_rating"] <- new_data %>% 
+  filter(is.na(user_age_band_item_imdb_mean_rating)) %>% 
+  mutate(user_age_band_item_imdb_mean_rating=new_age_band_imdb_mean + rnorm(1)*new_age_band_imdb_sd) %>% 
+  select(user_age_band_item_imdb_mean_rating)
+
+new_data[is.na(new_data$user_gender_age_band_item_imdb_mean_rating), "user_gender_age_band_item_imdb_mean_rating"] <- new_data %>% 
+  filter(is.na(user_gender_age_band_item_imdb_mean_rating)) %>% 
+  mutate(user_gender_age_band_item_imdb_mean_rating=new_gender_age_band_imdb_mean + rnorm(1)*new_gender_age_band_imdb_sd) %>% 
+  select(user_gender_age_band_item_imdb_mean_rating)
+
+# Fill missing vote numbers
+new_data[is.na(new_data$user_gender_item_imdb_votes), "user_gender_item_imdb_votes"] <- 0
+new_data[is.na(new_data$user_age_band_item_imdb_votes), "user_age_band_item_imdb_votes"] <- 0
+new_data[is.na(new_data$user_gender_age_band_item_imdb_votes), "user_gender_age_band_item_imdb_votes"] <- 0
+
+# Double check missing data has been filled
+sapply(new_data, function(x) sum(is.na(x)))
+
+# Random Forest Predictions
+new_data$rating = predict(rf, newdata=new_data)
+
+new_data$user_item <- paste(new_data$user_id, new_data$item_id, sep="_")
+
+submission_file <- new_data %>% 
+  select(rating, user_item) 
+
+write.csv(submission_file, "rf_submission.csv", row.names=FALSE)
+
        
 # Variable importance plot 
 
