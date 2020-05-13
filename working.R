@@ -7,6 +7,8 @@ library(randomForest)
 library(xgboost)
 library(parallel)
 library(doParallel)
+library(ranger)
+library(e1071)
 library(gbm)
 library(gridExtra)
 
@@ -503,3 +505,66 @@ submission_file <- new_data %>%
   rename(rating=rating_gbm)
 
 write.csv(submission_file, "gb_submission.csv", row.names=FALSE)
+       
+       
+# Random Forest tuned with Caret/Ranger
+# Set up parallel
+cluster = makeCluster(detectCores()-1)
+registerDoParallel(cluster)
+
+
+# Format Data
+train_caret <- train_set
+train_caret <- train_caret[, train_cols]
+train_caret$rating <- as.numeric(train_caret$rating)
+train_caret$age <- as.numeric(train_caret$age)
+train_caret$item_imdb_length <- as.numeric(train_caret$item_imdb_length)
+train_caret$item_imdb_staff_votes <- as.numeric(train_caret$item_imdb_staff_votes)
+train_caret$item_imdb_top_1000_voters_votes <- as.numeric(train_caret$item_imdb_top_1000_voters_votes)
+train_caret$user_count <- as.numeric(train_caret$user_count)
+
+# Control variables
+control <- trainControl(method="cv",
+                        number=5,
+                        allowParallel=TRUE)
+
+
+# Train model
+rf_caret <- train(y=train_caret$rating, 
+                  x=train_caret[,-1],
+                  method="ranger",
+                  trControl=control,
+                  verbose=FALSE,
+                  metric="RMSE")
+
+
+# Format Test Set
+test_caret <- test_set
+test_caret <- test_caret[, train_cols]
+test_caret$rating <- as.numeric(test_caret$rating)
+test_caret$age <- as.numeric(test_caret$age)
+test_caret$item_imdb_length <- as.numeric(test_caret$item_imdb_length)
+test_caret$item_imdb_staff_votes <- as.numeric(test_caret$item_imdb_staff_votes)
+test_caret$item_imdb_top_1000_voters_votes <- as.numeric(test_caret$item_imdb_top_1000_voters_votes)
+test_caret$user_count <- as.numeric(test_caret$user_count)
+test_caret[is.na(test_caret$user_sd_rating), "user_sd_rating"] <- 0
+
+
+# Predictions and RMSE
+caret_pred <- predict(rf_caret, newdata=test_caret[,-1])
+RMSE(test_set$rating, caret_pred)
+
+
+# Submission file
+new_data$rating = predict(rf_caret, newdata=new_data)
+new_data$user_item <- paste(new_data$user_id, new_data$item_id, sep="_")
+
+submission_file <- new_data %>% 
+  select(rating, user_item) 
+
+# check for missed predictions 
+nrow(submission_file)
+nrow(na.omit(submission_file))
+
+write.csv(submission_file, "rf_caret_submission.csv", row.names=FALSE)
+
