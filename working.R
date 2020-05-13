@@ -203,6 +203,44 @@ test_set <- test_set %>%
   select(-item_imdb_rating_of_ten, -item_imdb_count_ratings)
 test_set <- left_join(test_set, test_ratings, by="movie_title")
 
+
+# Calculate Genre Averages
+genre_calcs <- function(df){
+
+  genre_ratings <- df %>% 
+    select(user_id, rating, action:western)
+  genres <- names(genre_ratings)[3:length(genre_ratings)]
+  
+  user_genre_details <- genre_ratings %>% 
+    select(user_id) %>% 
+    unique()
+  
+  for(n in 1:length(genres)){
+    # Get genre mean ratings per user
+    single_genre <- genre_ratings[genre_ratings[genres[n]]==TRUE,] %>% 
+      group_by(user_id) %>% 
+      summarise(mean=mean(rating))
+    
+    names(single_genre)[2] <- paste(genres[n], "mean", sep="_")
+    
+    # Merge all genres 
+    user_genre_details <- left_join(user_genre_details, single_genre, by="user_id")
+  
+    # Mean imputation
+    col <- names(user_genre_details)[1+n]
+    user_genre_details[is.na(user_genre_details[col]), col] <- mean(unlist(user_genre_details[col]), na.rm=TRUE)
+  }
+  
+  return(user_genre_details)
+}
+
+train_genre <- genre_calcs(train_set)
+test_genre <- genre_calcs(test_set)
+
+train_set <- left_join(train_set, train_genre, by="user_id")
+test_set <- left_join(test_set, test_genre, by="user_id")
+
+       
 #train_set %>% 
 #  group_by(user_id) %>% 
 #  summarise(user_mean=10/5*mean(rating), imdb=mean(item_imdb_rating_of_ten)) 
