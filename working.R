@@ -318,7 +318,9 @@ rf <- randomForest(formula=rating~.,
                    data=train_rf, 
                    importance=TRUE, 
                    xtest=test_rf[, train_cols[2:length(train_cols)]], 
-                   ntree=100)
+                   ntree=100, 
+                   keep.forest=TRUE
+                   )
 
 # Calculate RMSE
 RMSE(rf$test$predicted, test_set$rating)
