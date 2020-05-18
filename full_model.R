@@ -15,9 +15,138 @@ library(gridExtra)
 # Set Up
 rm(list=ls())
 dev.off()
-path <- "C:/Users/mnelo/Documents/DAM/A2"
-setwd(path)
+#path <- "C:/Users/mnelo/Documents/DAM/A2"
+#setwd(path)
 set.seed(999)
+
+# Load Initial File
+data <- readRDS("AT2_train_STUDENT.rds")
+
+
+########## Exploratory Data Analysis
+
+# View data
+summary(data)
+str(data)
+
+### Correlations
+# Isolate rating columns
+all_ratings <- data %>% 
+  select(user_id, item_mean_rating:user_gender_age_band_item_imdb_mean_rating)  
+vote_cols <- grep("_votes|_count|_length", names(all_ratings)) 
+all_ratings <- all_ratings[, -vote_cols]
+
+# Rename for clearer plots
+names(all_ratings) <- all_ratings %>% 
+  names() %>% 
+  str_replace_all(c("item_"="", "band_"="", "_of_ten"="", "_voters"="",
+                    "_average"="", "_mean_rating"="", "_rating"=""))
+
+# Calculate correlations
+cor_matrix <- all_ratings %>% 
+  select(-user_id) %>% 
+  na.omit() %>% 
+  cor(method="pearson")
+
+# Plot
+corrplot(cor_matrix, method="color", type="upper", tl.srt=45,
+         addCoef.col="black", number.cex=.7)
+
+## Rating Distributions 
+
+# Plot movie ratings per subgroup of voters
+p <- all_ratings %>% 
+  select(user_id, mean, imdb, imdb_staff, imdb_top_1000) %>% 
+  mutate(mean=10/5*mean) %>% 
+  na.omit() %>% 
+  gather(key=category, value=values, -user_id) %>% 
+  ggplot(aes(x=values, group=category, fill=category)) + 
+  geom_density() + 
+  facet_wrap(~category, ncol=2) + 
+  theme(legend.position="none") + 
+  labs(title="Distribution of Ratings",
+       subtitle="Movie Ratings Per Sub-Group",
+       x="Rating", 
+       y="")
+p
+
+# Plot movie ratings for derivative groups
+p <- all_ratings %>% 
+  select(-mean, -imdb, -imdb_staff, -imdb_top_1000) %>% 
+  na.omit() %>%
+  mutate(user_age=10/5*user_age, user_gender=10/5*user_gender) %>% 
+  gather(key=category, value=values, -user_id) %>% 
+  ggplot(aes(x=values, group=category, fill=category)) + 
+  geom_density() + 
+  facet_wrap(~category, ncol=2) + 
+  theme(legend.position="none") + 
+  labs(title="Distribution of Ratings",
+       subtitle="Derivative Sub-Groups",
+       x="Rating", 
+       y="")
+p
+
+
+# Plot Ratings Per Genre 
+# Format Data
+genre_data <- data %>% 
+  select(user_id, rating, action:western)
+genre_names <- names(genre_data)[3:length(genre_data)]
+
+genre_plot <- genre_data %>% 
+  select(user_id) %>% 
+  unique()
+
+# Loop through genres
+for(n in 1:length(genre_names)){
+  
+  single_genre <- genre_data[genre_data[genre_names[n]]==TRUE,] %>% 
+    group_by(user_id) %>% 
+    summarise(mean=mean(rating)) %>% 
+    ungroup()
+  
+  names(single_genre)[2] <- paste(genre_names[n], "mean", sep="_")
+  
+  # Merge all genres 
+  genre_plot <- left_join(genre_plot, single_genre, by="user_id")
+}
+
+# Plot
+p <- genre_plot %>%
+  na.omit() %>% 
+  gather(key=category, value=values, -user_id) %>% 
+  ggplot(aes(x=values, group=category, fill=category)) +
+  geom_density() +
+  facet_wrap(~category, ncol=6, scales="free_y") + 
+  theme(legend.position="none") + 
+  labs(title="Genre Distributions", 
+       subtitle="User Average per Genre", 
+       x="Rating", 
+       y="")
+p  
+
+
+# Plot counts per Genre 
+# Calculate counts
+genre_count_plot <- genre_data %>% 
+  select(-rating) %>% 
+  group_by(user_id) %>% 
+  summarise_all(sum) %>% 
+  ungroup()
+
+# Plot 
+p <- genre_count_plot %>% 
+  na.omit() %>% 
+  gather(key=category, value=values, -user_id) %>% 
+  ggplot(aes(x=reorder(category, values), y=values, fill=category)) + 
+  geom_boxplot() +
+  ylim(NA, 150) +
+  theme(legend.position="none", axis.text.x=element_text(angle=45)) + 
+  labs(title="Number of User Reviews", 
+       subtitle="Y-axis capped at 150. 13 outliers excluded.",
+       x="Genres",
+       y="Count")
+p 
 
 
 ########## Functions 
@@ -382,26 +511,51 @@ imdb_rating_impute <- function(df){
 }
 
 
+
 # Dummy Variable construction for acceptable format into ranger/xgboost
-gender_one_hot_encoding <- function(df){
-  # Create dummy variable
+dummy_variables <- function(df){
+  
+  # Create dummy variable, convert to one-hot encoding (0 or 1), replace in dataset
+  
+  # Gender
   dummy <- dummyVars("~.", data=select(df, gender))
-  
-  # One-hot format (0 or 1)
   hot <- data.frame(predict(dummy, newdata=select(df, gender)))
-  
-  # Replace in main dataset
   df <- cbind(select(df, -gender), hot)
+  
+  # Age Band 
+  df$age_band <- as.character(df$age_band)
+  dummy <- dummyVars("~.", data=select(df, age_band))
+  hot <- data.frame(predict(dummy, newdata=select(df, age_band)))
+  df <- cbind(select(df, -age_band), hot)
+  
+  # Occupation
+  dummy <- dummyVars("~.", data=select(df, occupation))
+  hot <- data.frame(predict(dummy, newdata=select(df, occupation)))
+  df <- cbind(select(df, -occupation), hot)
+  
+  # Maturity rating
+  df$item_imdb_mature_rating <- as.character(df$item_imdb_mature_rating)
+  dummy <- dummyVars("~.", data=select(df, item_imdb_mature_rating))
+  hot <- data.frame(predict(dummy, newdata=select(df, item_imdb_mature_rating)))
+  df <- cbind(select(df, -item_imdb_mature_rating), hot)
+  
+  # Zip Code
+  dummy <- dummyVars("~.", data=select(df, zip_code))
+  hot <- data.frame(predict(dummy, newdata=select(df, zip_code)))
+  df <- cbind(select(df, -zip_code), hot)
+  
+  # Review Day
+  dummy <- dummyVars("~.", data=select(df, weekday))
+  hot <- data.frame(predict(dummy, newdata=select(df, weekday)))
+  df <- cbind(select(df, -weekday), hot)
   
   return(df)
 }
 
 
 
-########## Data Set Up
 
-# Load Initial File
-data <- readRDS("AT2_train_STUDENT.rds")
+########## Data Set Up
 
 # Cleaning and tranforms that don't need to wait for train/test split.
 data <- clean_data(data)
@@ -522,9 +676,9 @@ nrow(test_set) - nrow(na.omit(test_set))
 #train_set <- left_join(train_set, cf_user, by=c("user_id", "item_id"))
 #test_set <- left_join(test_set, cf_user, by=c("user_id", "item_id"))
 
-# Convert Gender Column to Dummy Variable 
-#train_set <- gender_one_hot_encoding(train_set)
-#test_set <- gender_one_hot_encoding(test_set)
+# Create dummy variables for categorical variables 
+#train_set <- dummy_variables(train_set)
+#test_set <- dummy_variables(test_set)
 
 # Impute missing values using xgboost predictions
 #train_set <- impute_xgb(train_set)
