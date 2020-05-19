@@ -784,7 +784,10 @@ p <- stack(rf$variable.importance) %>%
   head(20) %>% #tail(20)
   ggplot(aes(x=reorder(ind, values),y=values, fill=values)) + 
   geom_col() +
-  coord_flip()
+  coord_flip() + 
+  labs(title="Mean Decrease in Accuracy",
+       x="Values", 
+       y="Features")
 p
 
 # View full list
