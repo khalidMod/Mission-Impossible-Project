@@ -683,7 +683,13 @@ nrow(test_set) - nrow(na.omit(test_set))
 # Impute missing values using xgboost predictions
 #train_set <- impute_xgb(train_set)
 #test_set <- impute_xgb(test_set)
-
+               
+# Time between review and release date
+#train_set <- train_set %>% 
+#  group_by(movie_title) %>% 
+#  mutate(review_rank=rank(timestamp)) %>% 
+#  ungroup()
+               
 
 ########## Outlier Filtering - Ineffective 
 
