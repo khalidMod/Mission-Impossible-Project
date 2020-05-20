@@ -33,7 +33,7 @@ str(data)
 # Isolate rating columns
 all_ratings <- data %>% 
   select(user_id, item_mean_rating:user_gender_age_band_item_imdb_mean_rating)  
-vote_cols <- grep("_votes|_count|_length", names(all_ratings)) 
+vote_cols <- grep("_votes|_count|_length|_mature", names(all_ratings)) 
 all_ratings <- all_ratings[, -vote_cols]
 
 # Rename for clearer plots
